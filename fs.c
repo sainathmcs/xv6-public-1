@@ -359,21 +359,65 @@ iunlockput(struct inode *ip)
   iput(ip);
 }
 
-//PAGEBREAK!
-// Inode content
-//
-// The content (data) associated with each inode is stored
-// in blocks on the disk. The first NDIRECT block numbers
-// are listed in ip->addrs[].  The next NINDIRECT blocks are
-// listed in block ip->addrs[NDIRECT].
 
-// Return the disk block address of the nth block in inode ip.
-// If there is no such block, bmap allocates one.
+static uint
+extent_bmap(struct inode *ip, uint bn)
+{
+  uint addr;
+  int i = 0;
+  int j = 0;
+
+  if (bn < NDIRECT*256)
+  {
+    while (i < NDIRECT)
+    {
+      if (bn >= i + j && bn < i + j + (ip->addrs[i] & 0xFF))
+      {
+        return (ip->addrs[i] >> 8) + bn - j - i;
+      }
+      j += ip->addrs[i] & 0xFF;
+      i++;
+    }
+
+    addr = balloc(ip->dev);
+    i = 0;
+
+    while (i < NDIRECT)
+    {
+      if (ip->addrs[i] == 0)
+      {
+        if(i > 0 && (ip->addrs[i-1] & 0xFF) != 255 && 
+          ((ip->addrs[i-1] >> 8) + (ip->addrs[i-1] & 0xFF) +1) == addr)
+        {
+          ip->addrs[i-1] = (ip->addrs[i-1] & 0xFFFFFF00) + (ip->addrs[i-1] & 0xFF) + 1;
+          return addr;
+        }
+        ip->addrs[i] = (addr << 8);
+        return addr;
+      }
+      else if(i == NDIRECT - 1 && ((ip->addrs[i] >> 8) + (ip->addrs[i] & 0xFF) + 1) == addr)
+      {
+        ip->addrs[i] = (ip->addrs[i] & 0xFFFFFF00) + (ip->addrs[i] & 0xFF) + 1;
+        return addr;
+      }
+      i++;
+    }
+    bfree(ip->dev, addr);
+  }
+  panic("bmap: out of range");
+}
+
+
 static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
+
+  if(ip->type == T_EXTENT)
+  {
+    return extent_bmap(ip, bn);
+  }
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
@@ -390,6 +434,53 @@ bmap(struct inode *ip, uint bn)
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
       a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+
+  bn -= NINDIRECT;
+
+  if(bn < NINDIRECT*NINDIRECT){
+    // Load double indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn/NINDIRECT]) == 0){
+      a[bn/NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn%NINDIRECT]) == 0){
+      a[bn%NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+
+  bn -= DINDIRECT;
+ 
+  
+   if(bn < NINDIRECT*NINDIRECT){
+    // Load double indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT+2]) == 0)
+      ip->addrs[NDIRECT+2] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn/NINDIRECT]) == 0){
+      a[bn/NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn%NINDIRECT]) == 0){
+      a[bn%NINDIRECT] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -444,6 +535,31 @@ stati(struct inode *ip, struct stat *st)
   st->type = ip->type;
   st->nlink = ip->nlink;
   st->size = ip->size;
+  if (ip->type == T_EXTENT) {
+    st->addrs[0] = ip->addrs[0]>>8;
+    st->range[0] = ip->addrs[0]&0xFF;
+    st->addrs[1] = ip->addrs[1]>>8;
+    st->range[1] = ip->addrs[1]&0xFF;
+    st->addrs[2] = ip->addrs[2]>>8;
+    st->range[2] = ip->addrs[2]&0xFF;
+    st->addrs[3] = ip->addrs[3]>>8;
+    st->range[3] = ip->addrs[3]&0xFF;
+    st->addrs[4] = ip->addrs[4]>>8;
+    st->range[4] = ip->addrs[4]&0xFF;
+    st->addrs[5] = ip->addrs[5]>>8;
+    st->range[5] = ip->addrs[5]&0xFF;
+    st->addrs[6] = ip->addrs[6]>>8;
+    st->range[6] = ip->addrs[6]&0xFF;
+    st->addrs[7] = ip->addrs[7]>>8;
+    st->range[7] = ip->addrs[7]&0xFF;
+    st->addrs[8] = ip->addrs[8]>>8;
+    st->range[8] = ip->addrs[8]&0xFF;
+    st->addrs[9] = ip->addrs[9]>>8;
+    st->range[9] = ip->addrs[9]&0xFF;
+  }
+  else {
+    memmove(st->addrs, ip->addrs, sizeof(ip->addrs));
+  }
 }
 
 //PAGEBREAK!

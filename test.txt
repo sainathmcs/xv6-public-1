@@ -1,0 +1,116 @@
+#include "types.h"
+#include "stat.h"
+#include "user.h"
+
+#define MAX_LINE_SIZE 512
+
+int readLine(int fd, char *buffer) {
+    char character;
+    int bytesRead;
+    int position = 0;
+
+    while ((bytesRead = read(fd, &character, sizeof(character))) > 0 && position < MAX_LINE_SIZE - 1) {
+        if (character == '\n') {
+            buffer[position++] = '\0';
+            return 1;
+        } else {
+            buffer[position++] = character;
+        }
+    }
+
+    if (bytesRead < 0) {
+        printf(1, "Error reading file\n");
+        exit();
+    }
+
+    buffer[position++] = '\0';
+    return bytesRead == 0 ? 2 : -1;
+}
+
+int strncmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
+void displayLine(const char *line, int count, int countLines) {
+    if (countLines)
+        printf(1, "%d %s\n", count, line);
+    else
+        printf(1, "%s\n", line);
+}
+
+void executeUniq(int fd, int countLines, int uniqueLines, int width) {
+    char currentLine[MAX_LINE_SIZE];
+    char lastLine[MAX_LINE_SIZE] = "";
+    int count = 0;
+    int readStatus;
+
+    while ((readStatus = readLine(fd, currentLine)) != 0) {
+        int comparison = strncmp(currentLine, lastLine);
+
+        if (comparison != 0 && count > 0) {
+            if (!uniqueLines || count == 1)
+                displayLine(lastLine, count, countLines);
+
+            strcpy(lastLine, currentLine);
+            count = 1;
+        } else {
+            count++;
+        }
+
+        if (readStatus == 2) { // End of file
+            break;
+        }
+    }
+
+    if ((count > 0) && (!uniqueLines || count == 1)) {
+        displayLine(lastLine, count, countLines);
+    }
+}
+
+int main(int argc, char *argv[]) {
+    int countLines = 0, uniqueLines = 0, width = MAX_LINE_SIZE;
+    int fd = 0; // Default to standard input
+
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            switch (argv[i][1]) {
+                case 'c':
+                    countLines = 1;
+                    break;
+                case 'u':
+                    uniqueLines = 1;
+                    break;
+                case 'w':
+                    if (i + 1 < argc) {
+                        width = atoi(argv[++i]);
+                    } else {
+                        printf(1, "uniq: '-w' requires an argument\n");
+                        exit();
+                    }
+                    break;
+                default:
+                    printf(1, "uniq: invalid option: %s\n", argv[i]);
+                    exit();
+            }
+        } else {
+            fd = open(argv[i], 0);
+            if (fd < 0) {
+                printf(1, "uniq: cannot open %s\n", argv[i]);
+                exit();
+            }
+            break; // Assuming only one filename argument
+        }
+    }
+
+    executeUniq(fd, countLines, uniqueLines, width);
+
+    if (fd != 0) {
+        close(fd);
+    }
+
+    exit();
+}

@@ -103,6 +103,19 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
+extern int sys_ticks_running(void); // updated
+extern int sys_sjf_job_length(void); // updated
+extern int sys_waitAndGetProcTimes(void);
+extern int sys_set_sched_priority(void);
+extern int sys_get_sched_priority(void);
+extern int sys_count_virtual_pages(void);
+extern int sys_count_physical_pages(void);
+extern int sys_lseek(void);
+extern int sys_symlink(void);
+extern int sys_clone(void);
+extern int sys_park(void);
+extern int sys_unpark(void);
+extern int sys_set_park(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -126,6 +139,18 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_ticks_running] sys_ticks_running, // updated
+[SYS_sjf_job_length] sys_sjf_job_length,
+[SYS_set_sched_priority] sys_set_sched_priority,
+[SYS_get_sched_priority] sys_get_sched_priority,
+[SYS_count_virtual_pages]    sys_count_virtual_pages,
+[SYS_count_physical_pages]   sys_count_physical_pages,
+[SYS_lseek]   sys_lseek,
+[SYS_symlink] sys_symlink,
+[SYS_clone]   sys_clone,
+[SYS_park]    sys_park,
+[SYS_unpark]  sys_unpark,
+[SYS_set_park] sys_set_park,
 };
 
 void

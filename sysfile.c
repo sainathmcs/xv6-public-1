@@ -253,6 +253,10 @@ create(char *path, short type, short major, short minor)
     ilock(ip);
     if(type == T_FILE && ip->type == T_FILE)
       return ip;
+    if(type == T_SYMLINK )
+      return ip;
+    if(type == T_EXTENT)
+      return ip;
     iunlockput(ip);
     return 0;
   }
@@ -296,10 +300,18 @@ sys_open(void)
   begin_op();
 
   if(omode & O_CREATE){
-    ip = create(path, T_FILE, 0, 0);
-    if(ip == 0){
-      end_op();
-      return -1;
+    if (omode & O_EXTENT) {
+      ip = create(path, T_EXTENT, 0, 0);
+      if(ip == 0){
+        end_op();
+        return -1;
+      }
+    } else {
+      ip = create(path, T_FILE, 0, 0);
+      if(ip == 0){
+        end_op();
+        return -1;
+      }
     }
   } else {
     if((ip = namei(path)) == 0){
@@ -311,6 +323,51 @@ sys_open(void)
       iunlockput(ip);
       end_op();
       return -1;
+    }
+  }
+
+  int max_depth = 8;
+  if(!(omode & O_NOFOLLOW))
+  {
+    if(ip->type == T_SYMLINK)
+    {
+      for(int depth = 0; depth < max_depth && ip->type == T_SYMLINK; depth++)
+      {
+        char buf[DIRSIZ];
+        for(int i = 0; i < DIRSIZ; i++)
+        {
+          buf[i] = 0;
+        }
+
+        if(readi(ip, buf, 0, ip->size) < 0)
+        {
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+
+        iunlockput(ip);
+        if ((ip = namei(buf)) == 0)
+        {
+          end_op();
+          return -1;
+        }
+
+        if(ip->type != T_SYMLINK)
+        {
+          if(ip->type != T_FILE)
+          {
+            if(ip->type != T_DIR)
+            {
+              iunlockput(ip);
+              end_op();
+              return -1;
+            }
+          }
+        }
+
+        ilock(ip);
+      }
     }
   }
 
@@ -440,5 +497,32 @@ sys_pipe(void)
   }
   fd[0] = fd0;
   fd[1] = fd1;
+  return 0;
+}
+
+int 
+sys_lseek(void)
+{
+  struct file *f;
+  int offset, fd;
+  if(argfd(0, &fd, &f) < 0 || argint(1, &offset) < 0)
+    return -1;
+  myproc()->ofile[fd]->off += offset;
+  return myproc()->ofile[fd]->off;
+}
+
+int
+sys_symlink(void)
+{
+  char *oldpath, *newpath;
+  struct inode *ip;
+  begin_op();
+  if(argstr(0, &oldpath) < 0 || argstr(1, &newpath) < 0 || (ip = create(newpath, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+  writei(ip, oldpath, 0, strlen(oldpath));
+  iunlockput(ip);
+  end_op();
   return 0;
 }

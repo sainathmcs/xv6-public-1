@@ -32,7 +32,7 @@ struct context {
   uint eip;
 };
 
-enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE , PARKED};
 
 // Per-process state
 struct proc {
@@ -49,8 +49,21 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int ticks_running;           // updated
+  int saved_ticks;
+  int estimated_job_length;    // updated for sjf
+  int start_time;
+  int end_time;
+  int priority;
+  uint current_tstack;
 };
 
+int get_sjf_job_length(int pid);
+int waitAndGetProcTimes(int);
+int get_ticks_running(int pid);
+int count_virtual_pages(struct proc *p);
+int count_physical_pages(struct proc *p);
+pte_t* walkpgdir(pde_t *pgdir, const void *va,int alloc);
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss

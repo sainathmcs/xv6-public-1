@@ -1,5 +1,7 @@
+
 struct stat;
 struct rtcdate;
+struct ticketlock;
 
 // system calls
 int fork(void);
@@ -23,6 +25,19 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int ticks_running(int);
+int sjf_job_length(int);
+int waitAndGetProcTimes(int);
+int set_sched_priority(int, int);
+int get_sched_priority(int);
+int count_virtual_pages(void);
+int count_physical_pages(void);
+int lseek(int, int);
+int symlink(const char*, const char*);
+int clone(void* fcn);
+int park(void);
+int unpark(int);
+int set_park(int);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -37,3 +52,10 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+
+// ticketlock.c
+void ticketlock_init(struct ticketlock*);
+void ticketlock_acquire(struct ticketlock*);
+void ticketlock_release(struct ticketlock*);
+
+// 

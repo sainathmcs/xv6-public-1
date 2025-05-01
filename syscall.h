@@ -20,3 +20,16 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+#define SYS_ticks_running  22
+#define SYS_sjf_job_length  23
+//#define SYS_waitAndGetProcTimes 24
+#define SYS_set_sched_priority 24
+#define SYS_get_sched_priority 25
+#define SYS_count_virtual_pages 26
+#define SYS_count_physical_pages 27
+#define SYS_lseek 28
+#define SYS_symlink 29
+#define SYS_clone 30
+#define SYS_park 31
+#define SYS_unpark 32
+#define SYS_set_park 33

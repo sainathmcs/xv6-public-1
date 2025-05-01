@@ -71,6 +71,21 @@ QEMU = $(shell if which qemu > /dev/null; \
 	echo "***" 1>&2; exit 1)
 endif
 
+# Scheduler selection
+ifndef SCHEDULER
+SCHEDULER := DEFAULT
+endif
+
+ifeq ($(SCHEDULER),SJF)
+CFLAGS += -DSCHEDULER_SJF
+else ifeq ($(SCHEDULER),PRIORITY)
+CFLAGS += -DSCHEDULER_PRIORITY
+else
+CFLAGS += -DSCHEDULER_DEFAULT
+endif
+
+
+
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
 LD = $(TOOLPREFIX)ld
@@ -79,6 +94,7 @@ OBJDUMP = $(TOOLPREFIX)objdump
 CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
+
 # FreeBSD ld wants ``elf_i386_fbsd''
 LDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null | head -n 1)
 
@@ -90,7 +106,24 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 
-xv6.img: bootblock kernel
+# Scheduler selection
+ifeq ($(SCHEDULER),PRIORITY)
+CFLAGS += -DPRIORITY_SCHED
+endif
+
+ifeq ($(SCHEDULER),SJF)
+CFLAGS += -DSJF_SCHED
+endif
+
+ifeq ($(ALLOCATOR),LOCALITY)
+CFLAGS += -DALLOCATOR_LOCALITY
+else
+CFLAGS += -DALLOCATOR_LAZY
+endif
+
+
+all: xv6.img
+xv6.img: bootblock kernel fs.img
 	dd if=/dev/zero of=xv6.img count=10000
 	dd if=bootblock of=xv6.img conv=notrunc
 	dd if=kernel of=xv6.img seek=1 conv=notrunc
@@ -143,7 +176,7 @@ tags: $(OBJS) entryother.S _init
 vectors.S: vectors.pl
 	./vectors.pl > vectors.S
 
-ULIB = ulib.o usys.o printf.o umalloc.o
+ULIB = ulib.o usys.o printf.o umalloc.o ticketlock.o queuelock.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
@@ -155,6 +188,11 @@ _forktest: forktest.o $(ULIB)
 	# in order to be able to max out the proc table.
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o _forktest forktest.o ulib.o usys.o
 	$(OBJDUMP) -S _forktest > forktest.asm
+
+_testsjf: testsjf.o $(ULIB)
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o _testsjf testsjf.o $(ULIB)
+	$(OBJDUMP) -S _testsjf > testsjf.asm
+
 
 mkfs: mkfs.c fs.h
 	gcc -Werror -Wall -o mkfs mkfs.c
@@ -181,9 +219,26 @@ UPROGS=\
 	_usertests\
 	_wc\
 	_zombie\
+	_sailesh\
+	_sleep\
+	_uniq\
+	_find\
+	_test_ticks_running\
+	_sjf\
+	_testscheduler\
+	_test_priority\
+	_test_default\
+	_test_pages\
+	_lseek\
+	_symlink\
+	_lfs\
+	_ext\
+	_stat\
+	_clone\
+	_test_ticket\
 
-fs.img: mkfs README $(UPROGS)
-	./mkfs fs.img README $(UPROGS)
+fs.img: mkfs README text.txt  $(UPROGS)
+	./mkfs fs.img README text.txt  $(UPROGS)
 
 -include *.d
 
@@ -196,7 +251,7 @@ clean:
 
 # make a printout
 FILES = $(shell grep -v '^\#' runoff.list)
-PRINT = runoff.list runoff.spec README toc.hdr toc.ftr $(FILES)
+PRINT = runoff.list runoff.spec README toc.hdr toc.ftr text.txt $(FILES)
 
 xv6.pdf: $(PRINT)
 	./runoff
@@ -220,7 +275,7 @@ ifndef CPUS
 CPUS := 2
 endif
 QEMUOPTS = -drive file=fs.img,index=1,media=disk,format=raw -drive file=xv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 512 $(QEMUEXTRA)
-
+flags: @echo $(SCHEDULER)
 qemu: fs.img xv6.img
 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
 
@@ -249,10 +304,14 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
-	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
-	printf.c umalloc.c\
+	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c  test_allocator.c\
+	printf.c umalloc.c sailesh.c sleep.c uniq.c find.c test_ticks_running.c testscheduler.c test_default.c\
+	lseek.c symlink.c lfs.c ext.c\
+	stat.c\
+	clone.c\
+	test_ticket.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
-	.gdbinit.tmpl gdbutil\
+	.gdbinit.tmpl gdbutil OS611_example.txt text.txt\
 
 dist:
 	rm -rf dist
